@@ -91,3 +91,98 @@
     count: uint,
   }
 )
+
+;; Contract statistics
+(define-map contract-stats
+  { key: (string-ascii 32) }
+  { value: uint }
+)
+
+;; State Variables
+(define-data-var tag-counter uint u0)
+(define-data-var contract-paused bool false)
+
+;; Internal Helper Functions
+
+;; Add tag ID to creator's index
+(define-private (add-to-creator-index
+    (creator principal)
+    (tag-id uint)
+  )
+  (let (
+      (current-data (default-to {
+        tag-ids: (list),
+        count: u0,
+      }
+        (map-get? creator-index { creator: creator })
+      ))
+      (current-list (get tag-ids current-data))
+      (current-count (get count current-data))
+    )
+    (match (as-max-len? (append current-list tag-id) u100)
+      new-list (begin
+        (map-set creator-index { creator: creator } {
+          tag-ids: new-list,
+          count: (+ current-count u1),
+        })
+        true
+      )
+      false
+    )
+  )
+)
+
+;; Add tag ID to recipient's index
+(define-private (add-to-recipient-index
+    (recipient principal)
+    (tag-id uint)
+  )
+  (let (
+      (current-data (default-to {
+        tag-ids: (list),
+        count: u0,
+      }
+        (map-get? recipient-index { recipient: recipient })
+      ))
+      (current-list (get tag-ids current-data))
+      (current-count (get count current-data))
+    )
+    (match (as-max-len? (append current-list tag-id) u100)
+      new-list (begin
+        (map-set recipient-index { recipient: recipient } {
+          tag-ids: new-list,
+          count: (+ current-count u1),
+        })
+        true
+      )
+      false
+    )
+  )
+)
+
+;; Check if tag has expired
+(define-private (is-tag-expired (expires-at uint))
+  (>= stacks-block-height expires-at)
+)
+
+;; Increment contract statistics
+(define-private (increment-stat (stat-key (string-ascii 32)))
+  (let ((current-value (default-to u0 (get value (map-get? contract-stats { key: stat-key })))))
+    (map-set contract-stats { key: stat-key } { value: (+ current-value u1) })
+  )
+)
+
+;; Read-Only Functions
+
+;; Get current tag counter
+(define-read-only (get-tag-counter)
+  (var-get tag-counter)
+)
+
+;; Get specific payment tag details
+(define-read-only (get-payment-tag (tag-id uint))
+  (match (map-get? payment-tags { id: tag-id })
+    tag-data (ok tag-data)
+    (err ERR-NOT-FOUND)
+  )
+)
